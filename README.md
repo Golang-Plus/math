@@ -1,3 +1,3 @@
 # math
 
-Package math providers utilities for math.
+Package **math** providers utilities for math.
