@@ -2,7 +2,8 @@ package big
 
 import (
 	"bytes"
-	"io"
+	"fmt"
+	"math"
 	"math/big"
 	"strconv"
 	"strings"
@@ -10,202 +11,259 @@ import (
 	"github.com/golang-plus/errors"
 )
 
-// alignDecimalScale aligns the scale of two decimals.
-func alignDecimalScale(a, b *Decimal) {
-	switch {
-	case a.scale < b.scale:
-		a.integer.Mul(a.integer, new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(b.scale-a.scale)), nil))
-		a.scale = b.scale
-	case a.scale > b.scale:
-		b.integer.Mul(b.integer, new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(a.scale-b.scale)), nil))
-		b.scale = a.scale
-	}
-}
-
 // Decimal represents a decimal which can handing fixed precision.
 type Decimal struct {
-	integer *big.Int
-	scale   int // scale represents the number of deciaml digits
+	float     *big.Float
+	precision int
 }
 
-func (d *Decimal) ensureValid() {
-	if d.integer == nil {
-		d.integer = new(big.Int)
+func (x *Decimal) ensureInitialized() {
+	if x.float == nil {
+		x.float = new(big.Float)
+		x.precision = -1
 	}
 }
 
-// SetInt64 sets d to v and returns d.
-func (d *Decimal) SetInt64(v int64) *Decimal {
-	d.integer = big.NewInt(v)
-	return d
+// SetInt64 sets x to v and returns x.
+func (x *Decimal) SetInt64(v int64) *Decimal {
+	x.ensureInitialized()
+	x.float.SetInt64(v)
+	return x
 }
 
-// SetString sets d to the valud of v and returns d.
-func (d *Decimal) SetString(v string) (*Decimal, error) {
-	numberString := v
-	var unscaledBuffer bytes.Buffer
-	var scale int
-	reader := strings.NewReader(numberString)
-	index := 1
-	for {
-		ch, _, err := reader.ReadRune()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
+// SetFloat64 sets x to v and returns x.
+func (x *Decimal) SetFloat64(v float64) *Decimal {
+	x.ensureInitialized()
+	x.float.SetFloat64(v)
+	return x
+}
 
-			return nil, errors.Wrap(err, "could not read number string by rune")
-		}
-
-		switch ch {
-		case '+', '-':
-			if index > 1 { // sign must be first character
-				return nil, errors.Newf("invalid number string %q", numberString)
-			}
-			unscaledBuffer.WriteRune(ch)
-		case '.':
-			if scale != 0 {
-				return nil, errors.Newf("invalid number string %q", numberString)
-			}
-			scale = len(numberString) - index
-		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-			unscaledBuffer.WriteRune(ch)
-		default:
-			return nil, errors.Newf("invalid number string %q", numberString)
-		}
-
-		index++
+// SetString sets d to the value of s and returns d and a boolean indicating success.
+// If the operation failed, the value of d is undefined but the returned value is nil.
+func (x *Decimal) SetString(s string) (*Decimal, bool) {
+	x.ensureInitialized()
+	if _, ok := x.float.SetString(s); ok {
+		return x, true
 	}
-
-	integer, ok := new(big.Int).SetString(unscaledBuffer.String(), 10)
-	if !ok {
-		return nil, errors.Newf("invalid number string %q", numberString)
-	}
-
-	d.integer = integer
-	d.scale = scale
-
-	return d, nil
+	return nil, false
 }
 
-// SetFloat64 sets d to v and returns d.
-func (d *Decimal) SetFloat64(v float64) *Decimal {
-	numberString := strconv.FormatFloat(v, 'f', -1, 64)
-	d.SetString(numberString)
-	return d
-}
-
-// Cmp compares d and another and returns:
-// -1 if d <  another
-//  0 if d == another
-// +1 if d >  another
-func (d *Decimal) Cmp(another *Decimal) int {
-	d.ensureValid()
-	another.ensureValid()
-
-	alignDecimalScale(d, another)
-	return d.integer.Cmp(another.integer)
-}
-
-// Add sets d to the sum of d and another and returns d.
-func (d *Decimal) Add(another *Decimal) *Decimal {
-	d.ensureValid()
-	another.ensureValid()
-
-	alignDecimalScale(d, another)
-	d.integer.Add(d.integer, another.integer)
-	return d
-}
-
-// Sub sets d to the difference d-another and returns d.
-func (d *Decimal) Sub(another *Decimal) *Decimal {
-	d.ensureValid()
-	another.ensureValid()
-
-	alignDecimalScale(d, another)
-	d.integer.Sub(d.integer, another.integer)
-	return d
-}
-
-// Mul sets d to the product d*another and returns d.
-func (d *Decimal) Mul(another *Decimal) *Decimal {
-	d.ensureValid()
-	another.ensureValid()
-
-	d.integer.Mul(d.integer, another.integer)
-	d.scale += another.scale
-	return d
-}
-
-// Div sets d to the quotient d/another and return d.
-func (d *Decimal) Div(another *Decimal) *Decimal {
-	d.ensureValid()
-	another.ensureValid()
-
-	numerator := new(big.Int).Exp(big.NewInt(int64(10)), big.NewInt(int64(another.scale)), nil).Int64()
-	denominator := another.integer.Int64()
-	b, _ := big.NewRat(numerator, denominator).Float64()
-
-	return d.Mul(new(Decimal).SetFloat64(b))
+// Copy sets x to y and returns x. y is not changed.
+func (x *Decimal) Copy(y *Decimal) *Decimal {
+	x.ensureInitialized()
+	x.float.Copy(y.float)
+	return x
 }
 
 // Sign returns:
 // -1: if d <  0
 //  0: if d == 0
 // +1: if d >  0
-func (d *Decimal) Sign() int {
-	d.ensureValid()
-	return d.integer.Sign()
+func (x *Decimal) Sign() int {
+	x.ensureInitialized()
+	return x.float.Sign()
 }
 
-// Float64 returns the nearest float64 value of decimal.
-func (d *Decimal) Float64() float64 {
-	d.ensureValid()
-	resultString := d.String()
-	result, _ := strconv.ParseFloat(resultString, 64)
-	return result
+// Cmp compares d and y and returns:
+// -1 if d < y
+//  0 if d == y (includes: -0 == 0, -Inf == -Inf, and +Inf == +Inf)
+// +1 if d > y
+func (x *Decimal) Cmp(y *Decimal) int {
+	x.ensureInitialized()
+	y.ensureInitialized()
+	return x.float.Cmp(y.float)
 }
 
-// FloatString returns a string representation of decimal form with precision digits of precision after the decimal point and the last digit rounded.
-func (d *Decimal) FloatString(precision uint) string {
-	d.ensureValid()
-
-	x := new(big.Rat).SetInt(d.integer)
-	y := new(big.Rat).Inv(new(big.Rat).SetInt(new(big.Int).Exp(big.NewInt(int64(10)), big.NewInt(int64(d.scale)), nil)))
-	z := new(big.Rat).Mul(x, y)
-	return z.FloatString(int(precision))
+// IsZero reports whether the x is equal to zero.
+func (x *Decimal) IsZero() bool {
+	x.ensureInitialized()
+	return x.float.Cmp(big.NewFloat(0)) == 0
 }
 
-// String returns the string of Decimal.
-func (d *Decimal) String() string {
-	d.ensureValid()
+// Abs sets x to the value |x| (the absolute value of x) and returns x.
+func (x *Decimal) Abs() *Decimal {
+	x.ensureInitialized()
+	x.float.Abs(x.float)
+	return x
+}
 
-	unscaledString := strings.TrimLeft(d.integer.String(), "-")
-	if d.scale == 0 {
-		return unscaledString
+// Neg sets x to the value of x with its sign negated, and returns x.
+func (x *Decimal) Neg() *Decimal {
+	x.ensureInitialized()
+	x.float.Neg(x.float)
+	return x
+}
+
+// Add sets d to the sum of d and y and returns x.
+func (x *Decimal) Add(y *Decimal) *Decimal {
+	x.ensureInitialized()
+	y.ensureInitialized()
+	x.float.Add(x.float, y.float)
+	return x
+}
+
+// Sub sets d to the difference x-y and returns x.
+func (x *Decimal) Sub(y *Decimal) *Decimal {
+	x.ensureInitialized()
+	y.ensureInitialized()
+	x.float.Sub(x.float, y.float)
+	return x
+}
+
+// Mul sets x to the product x*y and returns x.
+func (x *Decimal) Mul(y *Decimal) *Decimal {
+	x.ensureInitialized()
+	y.ensureInitialized()
+	x.float.Mul(x.float, y.float)
+	return x
+}
+
+// Quo sets x to the quotient x/y and return x.
+func (x *Decimal) Quo(y *Decimal) *Decimal {
+	x.ensureInitialized()
+	y.ensureInitialized()
+	x.float.Quo(x.float, y.float)
+	return x
+}
+
+// Div is same to Quo.
+func (x *Decimal) Div(y *Decimal) *Decimal {
+	return x.Quo(y)
+}
+
+// RoundToNearestEven rounds (IEEE 754-2008 Round to nearest, ties to even) the floating-point number x with given precision (the number of digits after the decimal point).
+func (x *Decimal) RoundToNearestEven(precision uint) *Decimal {
+	x.ensureInitialized()
+	x.precision = int(precision)
+
+	str := strings.TrimRight(x.float.Text('f', int(precision+1)), "0")
+	parts := strings.Split(str, ".")
+	if len(parts) == 1 { // x is integer, do nothing
+		return x
+	}
+	if len(parts[1]) <= int(precision) { // round not needed
+		return x
 	}
 
-	pointIndex := len(unscaledString) - d.scale
-	switch {
-	case pointIndex < 0:
-		if d.integer.Sign() == -1 {
-			return "-0." + strings.Repeat("0", -1*pointIndex) + unscaledString
-		}
-
-		return "0." + strings.Repeat("0", -1*pointIndex) + unscaledString
-	case pointIndex > 0:
-		if d.integer.Sign() == -1 {
-			return "-" + unscaledString[0:pointIndex] + "." + unscaledString[pointIndex:]
-		}
-
-		return unscaledString[0:pointIndex] + "." + unscaledString[pointIndex:]
-	default: // pointIndex == 0
-		if d.integer.Sign() == -1 {
-			return "-0." + unscaledString
-		}
-
-		return "0." + unscaledString
+	roundUp := false
+	var rounded bytes.Buffer
+	rounded.WriteString(parts[0])
+	if precision > 0 {
+		rounded.WriteString(".")
+		rounded.WriteString(parts[1][:precision])
 	}
+	switch parts[1][precision : precision+1] {
+	case "6", "7", "8", "9":
+		roundUp = true
+	case "5":
+		if f, _ := new(big.Float).SetString(str); new(big.Float).Abs(x.float).Cmp(new(big.Float).Abs(f)) > 0 { // got decimals back of "5"
+			roundUp = true
+		} else {
+			var neighbor string
+			if precision > 1 {
+				neighbor = parts[1][precision-1 : precision]
+			} else {
+				neighbor = parts[0][len(parts[0])-1 : len(parts[0])]
+			}
+			switch neighbor {
+			case "1", "3", "5", "7", "9":
+				roundUp = true
+			}
+		}
+	}
+
+	z, _ := new(big.Float).SetString(rounded.String())
+	if roundUp {
+		factor := new(big.Float).Quo(big.NewFloat(0.1), big.NewFloat(math.Pow10(int(precision)-1)))
+		if x.float.Sign() == -1 {
+			factor.Neg(factor)
+		}
+		z.Add(z, factor)
+	}
+	x.float.Copy(z)
+
+	return x
+}
+
+// Round is short to RoundToNearestEven.
+func (x *Decimal) Round(precision uint) *Decimal {
+	return x.RoundToNearestEven(precision)
+}
+
+// RoundToNearestAway rounds (IEEE 754-2008, Round to nearest, ties away from zero) the floating-point number x with given precision (the number of digits after the decimal point).
+func (x *Decimal) RoundToNearestAway(precision uint) *Decimal {
+	x.ensureInitialized()
+	x.precision = int(precision)
+
+	pow := big.NewFloat(math.Pow10(int(precision)))
+	factor := big.NewFloat(0.5)
+	if x.float.Sign() == -1 {
+		factor.Neg(factor)
+	}
+	y := new(big.Float).Copy(x.float)
+	y.Mul(y, pow)
+	y.Add(y, factor)
+	integer, _ := y.Int64()
+	z := new(big.Float).SetInt64(integer)
+	z.Quo(z, pow)
+	x.float.Copy(z)
+
+	return x
+}
+
+// RoundToZero rounds (IEEE 754-2008 Round Towards Zero) the floating-point number x with given precision (the number of digits after the decimal point).
+func (x *Decimal) RoundToZero(precision uint) *Decimal {
+	x.ensureInitialized()
+	x.precision = int(precision)
+
+	pow := big.NewFloat(math.Pow10(int(precision)))
+	y := new(big.Float).Copy(x.float)
+	y.Mul(y, pow)
+	integer, _ := y.Int64()
+	z := new(big.Float).SetInt64(integer)
+	z.Quo(z, pow)
+	x.float.Copy(z)
+
+	return x
+}
+
+// Truncate is same as RoundToZero.
+func (x *Decimal) Truncate(precision uint) *Decimal {
+	return x.RoundToZero(precision)
+}
+
+// Float32 returns the float32 value nearest to x and a boolean indicating whether is exact.
+func (x *Decimal) Float32() (float32, bool) {
+	x.ensureInitialized()
+	f, acc := x.float.Float32()
+	isExact := acc == big.Exact
+	return f, isExact
+}
+
+// Float64 returns the float64 value nearest to x and a boolean indicating whether is exact.
+func (x *Decimal) Float64() (float64, bool) {
+	x.ensureInitialized()
+	f, acc := x.float.Float64()
+	isExact := acc == big.Exact
+	return f, isExact
+}
+
+// Int64 returns the int64 value nearest to x and a boolean indicating whether is exact.
+func (x *Decimal) Int64() (int64, bool) {
+	x.ensureInitialized()
+	f, acc := x.float.Int64()
+	isExact := acc == big.Exact
+	return f, isExact
+}
+
+// String converts the floating-point number x to a string.
+func (x *Decimal) String() string {
+	x.ensureInitialized()
+	f, _ := x.float.Float64()
+	if x.precision != -1 {
+		return fmt.Sprintf("%."+strconv.Itoa(int(x.precision))+"f", f)
+	}
+	return fmt.Sprintf("%f", f)
 }
 
 // NewDecimal returns a new decimal.
@@ -213,7 +271,10 @@ func NewDecimal(number float64) *Decimal {
 	return new(Decimal).SetFloat64(number)
 }
 
-// ParseDecimal returns a new decimal by parse decimal string.
-func ParseDecimal(numberString string) (*Decimal, error) {
-	return new(Decimal).SetString(numberString)
+// ParseDecimal returns a new decimal by parsing decimal string.
+func ParseDecimal(str string) (*Decimal, error) {
+	if d, ok := new(Decimal).SetString(str); ok {
+		return d, nil
+	}
+	return nil, errors.Newf("decimal string %q is invalid", str)
 }
