@@ -1,12 +1,19 @@
 package big
 
 import (
+	//	"fmt"
 	"testing"
 
 	testing2 "github.com/golang-plus/testing"
 )
 
 func TestDecimal(t *testing.T) {
+	/*x := 1.23456789*/
+	//f32, _ := NewDecimal(x).Float32()
+	//f64, _ := NewDecimal(x).Float64()
+	//i64, _ := NewDecimal(x).Int64()
+	/*fmt.Println(x, f32, f64, i64)*/
+
 	// round to nearest away
 	data := map[string]string{
 		"3.141592653589793238":  "3.1416",
