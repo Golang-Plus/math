@@ -1,5 +1,10 @@
 <a name=""></a>
-#  (2017-04-16)
+#  (2017-04-17)
+
+
+### Bug Fixes
+
+* produces unpredictable results sometimes ([f912932](https://github.com/Golang-Plus/math/commit/f912932))
 
 
 ### Features
