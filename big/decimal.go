@@ -42,7 +42,7 @@ func (d *Decimal) Float32() (float32, bool) {
 	if d.decimals == 0 {
 		return float32(d.integer.Int64()), true
 	}
-	return big.NewRat(d.integer.Int64(), int64(d.decimals)).Float32()
+	return big.NewRat(d.integer.Int64(), new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(d.decimals)), nil).Int64()).Float32()
 }
 
 // Float64 returns the float64 value nearest to d and a boolean indicating whether is exact.
@@ -51,7 +51,7 @@ func (d *Decimal) Float64() (float64, bool) {
 	if d.decimals == 0 {
 		return float64(d.integer.Int64()), true
 	}
-	return big.NewRat(d.integer.Int64(), int64(d.decimals)).Float64()
+	return big.NewRat(d.integer.Int64(), new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(d.decimals)), nil).Int64()).Float64()
 }
 
 // Int64 returns the int64 value nearest to d and a boolean indicating whether is exact.
@@ -60,7 +60,7 @@ func (d *Decimal) Int64() (int64, bool) {
 	if d.decimals == 0 {
 		return d.integer.Int64(), true
 	}
-	z, r := new(big.Int).QuoRem(d.integer, big.NewInt(int64(d.decimals)), new(big.Int))
+	z, r := new(big.Int).QuoRem(d.integer, new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(d.decimals)), nil), new(big.Int))
 	return z.Int64(), r.Int64() == 0
 }
 
