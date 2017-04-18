@@ -1,7 +1,6 @@
 package big
 
 import (
-	//	"fmt"
 	"testing"
 
 	testing2 "github.com/golang-plus/testing"
@@ -13,6 +12,8 @@ func TestDecimal(t *testing.T) {
 	//f64, _ := NewDecimal(x).Float64()
 	//i64, _ := NewDecimal(x).Int64()
 	/*fmt.Println(x, f32, f64, i64)*/
+	f, _ := NewDecimal(1000).Mul(NewDecimal(11.5)).Div(NewDecimal(100)).Float64()
+	testing2.AssertEqual(t, f, 115.0)
 
 	// round to nearest away
 	data := map[string]string{

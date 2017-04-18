@@ -163,7 +163,7 @@ func (x *Decimal) align(y *Decimal) {
 }
 
 func (d *Decimal) shrink() {
-	if d.decimals > 0 && d.integer.Int64()%10 == 0 {
+	for d.decimals > 0 && d.integer.Int64()%10 == 0 {
 		d.integer.SetInt64(d.integer.Int64() / 10)
 		d.decimals -= 1
 	}
@@ -222,18 +222,14 @@ func (x *Decimal) Quo(y *Decimal) *Decimal {
 	x.ensureInitialized()
 	y.ensureInitialized()
 	x.align(y)
-
-	// modulus x%y == 0
-	if q, r := new(big.Int).QuoRem(x.integer, y.integer, new(big.Int)); r.Int64() == 0 {
-		x.integer = q
-		x.shrink()
-		y.shrink()
-		return x
+	if q, r := new(big.Int).QuoRem(x.integer, y.integer, new(big.Int)); r.Int64() == 0 { // modulus x%y == 0
+		x.integer.SetInt64(q.Int64())
+		x.decimals = 0
+	} else { // modulus x%y > 0
+		f, _ := new(big.Float).Quo(new(big.Float).SetInt(x.integer), new(big.Float).SetInt(y.integer)).Float64()
+		x.SetFloat64(f)
 	}
 
-	// modulus x%y > 0
-	f, _ := new(big.Float).Quo(new(big.Float).SetInt(x.integer), new(big.Float).SetInt(y.integer)).Float64()
-	x.SetFloat64(f)
 	y.shrink()
 	return x
 }
