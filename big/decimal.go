@@ -72,18 +72,16 @@ func (d *Decimal) String() string {
 		return str
 	}
 
-	var sign, integer string
+	var sign string
 	if strings.HasPrefix(str, "-") {
 		sign = "-"
-		integer = str[1 : len(str)-d.decimals]
-	} else {
-		integer = str[:len(str)-d.decimals]
+		str = str[1:]
 	}
-	if len(integer) == 0 {
-		integer = "0"
+	if len(str) <= d.decimals {
+		str = strings.Repeat("0", d.decimals-len(str)+1) + str
 	}
-	decimals := str[len(str)-d.decimals:]
-	return sign + integer + "." + decimals
+	str = sign + str[:len(str)-d.decimals] + "." + str[len(str)-d.decimals:]
+	return str
 }
 
 // SetInt64 sets x to y and returns x.
