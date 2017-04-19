@@ -15,6 +15,9 @@ func TestDecimal(t *testing.T) {
 	f, _ := NewDecimal(1000).Mul(NewDecimal(11.5)).Div(NewDecimal(100)).Float64()
 	testing2.AssertEqual(t, f, 115.0)
 
+	// for String bug
+	testing2.AssertEqual(t, NewDecimal(0.1234000).String(), "0.1234")
+
 	// round to nearest away
 	data := map[string]string{
 		"3.141592653589793238":  "3.1416",
