@@ -1,6 +1,8 @@
 package big
 
 import (
+	"bytes"
+	"fmt"
 	"math/big"
 	"regexp"
 	"strconv"
@@ -9,10 +11,15 @@ import (
 	"github.com/golang-plus/errors"
 )
 
+var (
+	// max decimal digits allowd for indivisible quotient (exceeding be truncated).
+	MaxDecimalDigits = uint(200)
+)
+
 // Decimal represents a decimal which can handing fixed precision.
 type Decimal struct {
 	integer  *big.Int
-	decimals int
+	exponent int
 }
 
 func (d *Decimal) ensureInitialized() {
@@ -24,7 +31,7 @@ func (d *Decimal) ensureInitialized() {
 // IsZero reports whether the value of d is equal to zero.
 func (d *Decimal) IsZero() bool {
 	d.ensureInitialized()
-	return d.integer.Int64() == 0
+	return d.integer.Cmp(big.NewInt(0)) == 0
 }
 
 // Sign returns:
@@ -39,37 +46,57 @@ func (d *Decimal) Sign() int {
 // Float32 returns the float32 value nearest to d and a boolean indicating whether is exact.
 func (d *Decimal) Float32() (float32, bool) {
 	d.ensureInitialized()
-	if d.decimals == 0 {
-		return float32(d.integer.Int64()), true
+	a := new(big.Rat).SetInt(d.integer)
+	if d.exponent == 0 {
+		return a.Float32()
 	}
-	return big.NewRat(d.integer.Int64(), new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(d.decimals)), nil).Int64()).Float32()
+	b := new(big.Rat).SetInt(new(big.Int).Exp(big.NewInt(10), new(big.Int).Abs(big.NewInt(int64(d.exponent))), nil))
+	if d.exponent > 0 {
+		b.Inv(b)
+	}
+	z := new(big.Rat).Quo(a, b)
+	return z.Float32()
 }
 
 // Float64 returns the float64 value nearest to d and a boolean indicating whether is exact.
 func (d *Decimal) Float64() (float64, bool) {
 	d.ensureInitialized()
-	if d.decimals == 0 {
-		return float64(d.integer.Int64()), true
+	a := new(big.Rat).SetInt(d.integer)
+	if d.exponent == 0 {
+		return a.Float64()
 	}
-	return big.NewRat(d.integer.Int64(), new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(d.decimals)), nil).Int64()).Float64()
+	b := new(big.Rat).SetInt(new(big.Int).Exp(big.NewInt(10), new(big.Int).Abs(big.NewInt(int64(d.exponent))), nil))
+	if d.exponent > 0 {
+		b.Inv(b)
+	}
+	z := new(big.Rat).Quo(a, b)
+	return z.Float64()
 }
 
 // Int64 returns the int64 value nearest to d and a boolean indicating whether is exact.
 func (d *Decimal) Int64() (int64, bool) {
 	d.ensureInitialized()
-	if d.decimals == 0 {
+	if d.exponent == 0 {
 		return d.integer.Int64(), true
 	}
-	z, r := new(big.Int).QuoRem(d.integer, new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(d.decimals)), nil), new(big.Int))
-	return z.Int64(), r.Int64() == 0
+	if d.exponent > 0 {
+		z := new(big.Int).Mul(d.integer, new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(d.exponent)), nil))
+		return z.Int64(), true
+	}
+
+	z := new(big.Int).Quo(d.integer, new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(d.exponent*-1)), nil))
+	return z.Int64(), false
 }
 
 // String converts the floating-point number d to a string.
 func (d *Decimal) String() string {
 	d.ensureInitialized()
 	str := d.integer.String()
-	if d.decimals == 0 {
+	if d.exponent == 0 {
 		return str
+	}
+	if d.exponent > 0 {
+		return str + strings.Repeat("0", d.exponent)
 	}
 
 	var sign string
@@ -77,18 +104,24 @@ func (d *Decimal) String() string {
 		sign = "-"
 		str = str[1:]
 	}
-	if len(str) <= d.decimals {
-		str = strings.Repeat("0", d.decimals-len(str)+1) + str
+	p := len(str) - (d.exponent * -1)
+	if p <= 0 {
+		return sign + "0." + strings.Repeat("0", p*-1) + str
 	}
-	str = sign + str[:len(str)-d.decimals] + "." + str[len(str)-d.decimals:]
-	return str
+	integer := str[:p]
+	decimals := strings.TrimRight(str[p:], "0")
+	if len(decimals) == 0 {
+		return sign + integer
+	}
+
+	return sign + integer + "." + decimals
 }
 
 // SetInt64 sets x to y and returns x.
 func (x *Decimal) SetInt64(y int64) *Decimal {
 	x.ensureInitialized()
 	x.integer.SetInt64(y)
-	x.decimals = 0
+	x.exponent = 0
 	return x
 }
 
@@ -100,20 +133,19 @@ var (
 // If the operation failed, the value of d is undefined but the returned value is nil.
 func (x *Decimal) SetString(y string) (*Decimal, bool) {
 	x.ensureInitialized()
-
 	matches := _DecimalPattern.FindStringSubmatch(y)
 	if len(matches) != 6 {
 		return nil, false
 	}
-	integer, _ := strconv.ParseInt(matches[1]+strings.TrimRight(matches[3], "0"), 10, 64)
-	decimals := len(matches[3])
+	decimals := strings.TrimRight(matches[3], "0")
+	integer := matches[1] + decimals
+	exponent := len(decimals) * -1
 	if len(matches[5]) > 0 {
-		exponents, _ := strconv.ParseInt(matches[5], 10, 64)
-		decimals -= int(exponents)
+		exp, _ := strconv.ParseInt(matches[5], 10, 64)
+		exponent += int(exp)
 	}
-
-	x.integer.SetInt64(integer)
-	x.decimals = decimals
+	x.integer.SetString(integer, 10)
+	x.exponent = exponent
 
 	return x, true
 }
@@ -121,8 +153,7 @@ func (x *Decimal) SetString(y string) (*Decimal, bool) {
 // SetFloat64 sets x to y and returns x.
 func (x *Decimal) SetFloat64(y float64) *Decimal {
 	x.ensureInitialized()
-	str := strconv.FormatFloat(y, 'f', -1, 64)
-	x.SetString(str)
+	x.SetString(strconv.FormatFloat(y, 'f', -1, 64))
 	return x
 }
 
@@ -130,8 +161,8 @@ func (x *Decimal) SetFloat64(y float64) *Decimal {
 func (x *Decimal) Copy(y *Decimal) *Decimal {
 	x.ensureInitialized()
 	y.ensureInitialized()
-	x.integer.SetInt64(y.integer.Int64())
-	x.decimals = y.decimals
+	x.integer.Set(y.integer)
+	x.exponent = y.exponent
 	return x
 }
 
@@ -150,20 +181,15 @@ func (d *Decimal) Neg() *Decimal {
 }
 
 func (x *Decimal) align(y *Decimal) {
-	switch {
-	case x.decimals < y.decimals:
-		x.integer.Mul(x.integer, new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(y.decimals-x.decimals)), nil))
-		x.decimals = y.decimals
-	case x.decimals > y.decimals:
-		y.integer.Mul(y.integer, new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(x.decimals-y.decimals)), nil))
-		y.decimals = x.decimals
-	}
-}
-
-func (d *Decimal) shrink() {
-	for d.decimals > 0 && d.integer.Int64()%10 == 0 {
-		d.integer.SetInt64(d.integer.Int64() / 10)
-		d.decimals -= 1
+	if x.exponent != y.exponent {
+		diff := new(big.Int).Abs(new(big.Int).Sub(new(big.Int).Abs(big.NewInt(int64(x.exponent))), new(big.Int).Abs(big.NewInt(int64(y.exponent)))))
+		if x.exponent > y.exponent {
+			x.integer.Mul(x.integer, new(big.Int).Exp(big.NewInt(10), diff, nil))
+			x.exponent = y.exponent
+		} else {
+			y.integer.Mul(y.integer, new(big.Int).Exp(big.NewInt(10), diff, nil))
+			y.exponent = x.exponent
+		}
 	}
 }
 
@@ -175,10 +201,7 @@ func (x *Decimal) Cmp(y *Decimal) int {
 	x.ensureInitialized()
 	y.ensureInitialized()
 	x.align(y)
-	sign := x.integer.Cmp(y.integer)
-	x.shrink()
-	y.shrink()
-	return sign
+	return x.integer.Cmp(y.integer)
 }
 
 // Add sets d to the sum of d and y and returns x.
@@ -187,8 +210,6 @@ func (x *Decimal) Add(y *Decimal) *Decimal {
 	y.ensureInitialized()
 	x.align(y)
 	x.integer.Add(x.integer, y.integer)
-	x.shrink()
-	y.shrink()
 	return x
 }
 
@@ -198,8 +219,6 @@ func (x *Decimal) Sub(y *Decimal) *Decimal {
 	y.ensureInitialized()
 	x.align(y)
 	x.integer.Sub(x.integer, y.integer)
-	x.shrink()
-	y.shrink()
 	return x
 }
 
@@ -207,28 +226,54 @@ func (x *Decimal) Sub(y *Decimal) *Decimal {
 func (x *Decimal) Mul(y *Decimal) *Decimal {
 	x.ensureInitialized()
 	y.ensureInitialized()
-	x.align(y)
+
+	if y.integer.Cmp(big.NewInt(0)) == 0 { // *0
+		x.integer.SetInt64(0)
+		x.exponent = 0
+		return x
+	}
+
 	x.integer.Mul(x.integer, y.integer)
-	x.decimals *= 2
-	x.shrink()
-	y.shrink()
+	x.exponent += y.exponent
 	return x
 }
 
 // Quo sets x to the quotient x/y and return x.
+// Please set MaxDecimalDigitis for indivisible quotient.
 func (x *Decimal) Quo(y *Decimal) *Decimal {
 	x.ensureInitialized()
 	y.ensureInitialized()
-	x.align(y)
-	if q, r := new(big.Int).QuoRem(x.integer, y.integer, new(big.Int)); r.Int64() == 0 { // modulus x%y == 0
-		x.integer.SetInt64(q.Int64())
-		x.decimals = 0
-	} else { // modulus x%y > 0
-		f, _ := new(big.Float).Quo(new(big.Float).SetInt(x.integer), new(big.Float).SetInt(y.integer)).Float64()
-		x.SetFloat64(f)
+
+	if y.integer.Cmp(big.NewInt(0)) == 0 { // /0
+		x.integer.SetInt64(0)
+		x.exponent = 0
+		return x
 	}
 
-	y.shrink()
+	if z, r := new(big.Int).QuoRem(x.integer, y.integer, new(big.Int)); r.Cmp(big.NewInt(0)) == 0 { // modulus x%y == 0
+		x.integer = z
+		x.exponent -= y.exponent
+		return x
+	}
+
+	// modulus x%y > 0
+	var buf bytes.Buffer
+	if x.integer.Sign()*y.integer.Sign() == -1 {
+		buf.WriteString("-")
+	}
+	xi := new(big.Int).Abs(x.integer)
+	yi := new(big.Int).Abs(y.integer)
+	exp := x.exponent - y.exponent
+	z, r := new(big.Int).QuoRem(xi, yi, new(big.Int))
+	buf.WriteString(z.String())
+	for r.Cmp(big.NewInt(0)) != 0 && exp*-1 < int(MaxDecimalDigits) {
+		r.Mul(r, big.NewInt(10))
+		z, r = new(big.Int).QuoRem(r, yi, new(big.Int))
+		buf.WriteString(z.String())
+		exp -= 1
+	}
+	str := fmt.Sprintf("%se%d", buf.String(), exp)
+	x.SetString(str)
 	return x
 }
 
@@ -241,13 +286,13 @@ func (x *Decimal) Div(y *Decimal) *Decimal {
 func (x *Decimal) RoundToNearestEven(precision uint) *Decimal {
 	x.ensureInitialized()
 	prec := int(precision)
-	if x.IsZero() || x.decimals == 0 || x.decimals <= prec { // rounding needless
+	if x.IsZero() || x.exponent > 0 || x.exponent*-1 <= prec { // rounding needless
 		return x
 	}
 
-	str := strconv.FormatInt(x.integer.Int64(), 10)
-	part1 := str[:len(str)-x.decimals]
-	part2 := str[len(str)-x.decimals:]
+	str := x.integer.String()
+	part1 := str[:len(str)+x.exponent]
+	part2 := str[len(part1):]
 	isRoundUp := false
 	switch part2[prec : prec+1] {
 	case "6", "7", "8", "9":
@@ -269,12 +314,12 @@ func (x *Decimal) RoundToNearestEven(precision uint) *Decimal {
 		}
 	}
 
-	z, _ := strconv.ParseInt(part1+part2[:prec], 10, 64)
+	z, _ := new(big.Int).SetString(part1+part2[:prec], 10)
 	if isRoundUp {
-		z += int64(x.integer.Sign() * 1)
+		z.Add(z, big.NewInt(int64(x.integer.Sign())))
 	}
-	x.integer.SetInt64(z)
-	x.decimals = prec
+	x.integer = z
+	x.exponent = prec * -1
 
 	return x
 }
@@ -288,18 +333,19 @@ func (x *Decimal) Round(precision uint) *Decimal {
 func (x *Decimal) RoundToNearestAway(precision uint) *Decimal {
 	x.ensureInitialized()
 	prec := int(precision)
-	if x.IsZero() || x.decimals == 0 || x.decimals <= prec { // rounding needless
+	if x.IsZero() || x.exponent > 0 || x.exponent*-1 <= prec { // rounding needless
 		return x
 	}
 
-	x.integer.Quo(x.integer, new(big.Int).Exp(big.NewInt(int64(10)), big.NewInt(int64(x.decimals-int(precision)-1)), nil))
+	diff := new(big.Int).Sub(new(big.Int).Abs(big.NewInt(int64(x.exponent))), big.NewInt(int64(prec+1)))
+	x.integer.Quo(x.integer, new(big.Int).Exp(big.NewInt(10), diff, nil))
 	factor := big.NewInt(int64(5))
 	if x.integer.Sign() == -1 {
 		factor.Neg(factor)
 	}
 	x.integer.Add(x.integer, factor)
-	x.integer.Quo(x.integer, big.NewInt(int64(10)))
-	x.decimals = prec
+	x.integer.Quo(x.integer, big.NewInt(10))
+	x.exponent = prec * -1
 	return x
 }
 
@@ -307,12 +353,13 @@ func (x *Decimal) RoundToNearestAway(precision uint) *Decimal {
 func (x *Decimal) RoundToZero(precision uint) *Decimal {
 	x.ensureInitialized()
 	prec := int(precision)
-	if x.IsZero() || x.decimals == 0 || x.decimals <= prec { // rounding needless
+	if x.IsZero() || x.exponent > 0 || x.exponent*-1 <= prec { // rounding needless
 		return x
 	}
 
-	x.integer.Quo(x.integer, new(big.Int).Exp(big.NewInt(int64(10)), big.NewInt(int64(x.decimals-int(precision))), nil))
-	x.decimals = prec
+	diff := new(big.Int).Sub(new(big.Int).Abs(big.NewInt(int64(x.exponent))), big.NewInt(int64(prec)))
+	x.integer.Quo(x.integer, new(big.Int).Exp(big.NewInt(10), diff, nil))
+	x.exponent = prec * -1
 	return x
 }
 
