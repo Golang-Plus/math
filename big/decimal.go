@@ -282,16 +282,16 @@ func (x *Decimal) Div(y *Decimal) *Decimal {
 	return x.Quo(y)
 }
 
-// RoundToNearestEven rounds (IEEE 754-2008 Round to nearest, ties to even) the floating-point number x with given precision (the number of digits after the decimal point).
-func (x *Decimal) RoundToNearestEven(precision uint) *Decimal {
-	x.ensureInitialized()
+// RoundToNearestEven rounds (IEEE 754-2008, round to nearest, ties to even) the floating-point number x with given precision (the number of digits after the decimal point).
+func (d *Decimal) RoundToNearestEven(precision uint) *Decimal {
+	d.ensureInitialized()
 	prec := int(precision)
-	if x.IsZero() || x.exponent > 0 || x.exponent*-1 <= prec { // rounding needless
-		return x
+	if d.IsZero() || d.exponent > 0 || d.exponent*-1 <= prec { // rounding needless
+		return d
 	}
 
-	str := x.integer.String()
-	part1 := str[:len(str)+x.exponent]
+	str := d.integer.String()
+	part1 := str[:len(str)+d.exponent]
 	part2 := str[len(part1):]
 	isRoundUp := false
 	switch part2[prec : prec+1] {
@@ -316,56 +316,81 @@ func (x *Decimal) RoundToNearestEven(precision uint) *Decimal {
 
 	z, _ := new(big.Int).SetString(part1+part2[:prec], 10)
 	if isRoundUp {
-		z.Add(z, big.NewInt(int64(x.integer.Sign())))
+		z.Add(z, big.NewInt(int64(d.integer.Sign())))
 	}
-	x.integer = z
-	x.exponent = prec * -1
+	d.integer = z
+	d.exponent = prec * -1
 
-	return x
+	return d
 }
 
 // Round is short to RoundToNearestEven.
-func (x *Decimal) Round(precision uint) *Decimal {
-	return x.RoundToNearestEven(precision)
+func (d *Decimal) Round(precision uint) *Decimal {
+	return d.RoundToNearestEven(precision)
 }
 
-// RoundToNearestAway rounds (IEEE 754-2008, Round to nearest, ties away from zero) the floating-point number x with given precision (the number of digits after the decimal point).
-func (x *Decimal) RoundToNearestAway(precision uint) *Decimal {
-	x.ensureInitialized()
+// RoundToNearestAway rounds (IEEE 754-2008, round to nearest, ties away from zero) the floating-point number x with given precision (the number of digits after the decimal point).
+func (d *Decimal) RoundToNearestAway(precision uint) *Decimal {
+	d.ensureInitialized()
 	prec := int(precision)
-	if x.IsZero() || x.exponent > 0 || x.exponent*-1 <= prec { // rounding needless
-		return x
+	if d.IsZero() || d.exponent > 0 || d.exponent*-1 <= prec { // rounding needless
+		return d
 	}
 
-	diff := new(big.Int).Sub(new(big.Int).Abs(big.NewInt(int64(x.exponent))), big.NewInt(int64(prec+1)))
-	x.integer.Quo(x.integer, new(big.Int).Exp(big.NewInt(10), diff, nil))
+	diff := new(big.Int).Sub(new(big.Int).Abs(big.NewInt(int64(d.exponent))), big.NewInt(int64(prec+1)))
+	d.integer.Quo(d.integer, new(big.Int).Exp(big.NewInt(10), diff, nil))
 	factor := big.NewInt(int64(5))
-	if x.integer.Sign() == -1 {
+	if d.integer.Sign() == -1 {
 		factor.Neg(factor)
 	}
-	x.integer.Add(x.integer, factor)
-	x.integer.Quo(x.integer, big.NewInt(10))
-	x.exponent = prec * -1
-	return x
+	d.integer.Add(d.integer, factor)
+	d.integer.Quo(d.integer, big.NewInt(10))
+	d.exponent = prec * -1
+	return d
 }
 
-// RoundToZero rounds (IEEE 754-2008 Round Towards Zero) the floating-point number x with given precision (the number of digits after the decimal point).
-func (x *Decimal) RoundToZero(precision uint) *Decimal {
-	x.ensureInitialized()
+// RoundToZero rounds (IEEE 754-2008, round towards zero) the floating-point number x with given precision (the number of digits after the decimal point).
+func (d *Decimal) RoundToZero(precision uint) *Decimal {
+	d.ensureInitialized()
 	prec := int(precision)
-	if x.IsZero() || x.exponent > 0 || x.exponent*-1 <= prec { // rounding needless
-		return x
+	if d.IsZero() || d.exponent > 0 || d.exponent*-1 <= prec { // rounding needless
+		return d
 	}
 
-	diff := new(big.Int).Sub(new(big.Int).Abs(big.NewInt(int64(x.exponent))), big.NewInt(int64(prec)))
-	x.integer.Quo(x.integer, new(big.Int).Exp(big.NewInt(10), diff, nil))
-	x.exponent = prec * -1
-	return x
+	diff := new(big.Int).Sub(new(big.Int).Abs(big.NewInt(int64(d.exponent))), big.NewInt(int64(prec)))
+	d.integer.Quo(d.integer, new(big.Int).Exp(big.NewInt(10), diff, nil))
+	d.exponent = prec * -1
+	return d
 }
 
 // Truncate is same as RoundToZero.
-func (x *Decimal) Truncate(precision uint) *Decimal {
-	return x.RoundToZero(precision)
+func (d *Decimal) Truncate(precision uint) *Decimal {
+	return d.RoundToZero(precision)
+}
+
+// RoundDown is same as RoundToZero.
+func (d *Decimal) RoundDown(precision uint) *Decimal {
+	return d.RoundToZero(precision)
+}
+
+// RoundAwayFromZero rounds (no IEEE 754-2008, round way from zero) to floating-point number d with given precision.
+func (d *Decimal) RoundAwayFromZero(precision uint) *Decimal {
+	d.ensureInitialized()
+	prec := int(precision)
+	if d.IsZero() || d.exponent > 0 || d.exponent*-1 <= prec { // rounding needless
+		return d
+	}
+
+	diff := new(big.Int).Sub(new(big.Int).Abs(big.NewInt(int64(d.exponent))), big.NewInt(int64(prec)))
+	d.integer.Quo(d.integer, new(big.Int).Exp(big.NewInt(10), diff, nil))
+	d.integer.Add(d.integer, big.NewInt(int64(1*d.integer.Sign()))) // round up
+	d.exponent = prec * -1
+	return d
+}
+
+// RoundUp is same as RoundAwayFromZero.
+func (d *Decimal) RoundUp(precision uint) *Decimal {
+	return d.RoundAwayFromZero(precision)
 }
 
 // NewDecimal returns a new decimal.

@@ -81,7 +81,19 @@ func TestDecimal(t *testing.T) {
 		testing2.AssertEqual(t, x.Quo(y).String(), k)
 	}
 
-	// test RoundToZero/Truncate
+	// test RoundAwayFromZero/RoundUp
+	data5 := map[string]string{
+		"123456788987.6543211":  "123456788987.6544",
+		"-123456788987.6543211": "-123456788987.6544",
+		"1234567890":            "1234567890",
+		"0.1234567890":          "0.1235",
+	}
+	for k, v := range data5 {
+		d, _ := new(Decimal).SetString(k)
+		testing2.AssertEqual(t, d.RoundUp(4).String(), v)
+	}
+
+	// test RoundToZero/Truncate/RoundDown
 	data6 := map[string]string{
 		"123456788987.6543211":  "123456788987.6543",
 		"-123456788987.6543211": "-123456788987.6543",

@@ -1,4 +1,14 @@
 <a name=""></a>
+# [](https://github.com/Golang-Plus/math/compare/v1.2.0...v) (2017-04-21)
+
+
+### Features
+
+* add more round functions ([907d20a](https://github.com/Golang-Plus/math/commit/907d20a))
+
+
+
+<a name=""></a>
 #  (2017-04-20)
 
 
