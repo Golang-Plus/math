@@ -95,6 +95,9 @@ func (d *Decimal) String() string {
 	if d.exponent == 0 {
 		return str
 	}
+	if str == "0" {
+		return "0"
+	}
 	if d.exponent > 0 {
 		return str + strings.Repeat("0", d.exponent)
 	}
@@ -291,8 +294,16 @@ func (d *Decimal) RoundToNearestEven(precision uint) *Decimal {
 	}
 
 	str := d.integer.String()
-	part1 := str[:len(str)+d.exponent]
-	part2 := str[len(part1):]
+	var sign, part1, part2 string
+	if strings.HasPrefix(str, "-") {
+		sign = "-"
+		str = str[1:]
+	}
+	if len(str) < d.exponent*-1 {
+		str = strings.Repeat("0", (d.exponent*-1)-len(str)+1) + str
+	}
+	part1 = str[:len(str)+d.exponent]
+	part2 = str[len(part1):]
 	isRoundUp := false
 	switch part2[prec : prec+1] {
 	case "6", "7", "8", "9":
@@ -313,14 +324,12 @@ func (d *Decimal) RoundToNearestEven(precision uint) *Decimal {
 			}
 		}
 	}
-
-	z, _ := new(big.Int).SetString(part1+part2[:prec], 10)
+	z, _ := new(big.Int).SetString(sign+part1+part2[:prec], 10)
 	if isRoundUp {
 		z.Add(z, big.NewInt(int64(d.integer.Sign())))
 	}
 	d.integer = z
 	d.exponent = prec * -1
-
 	return d
 }
 
@@ -373,7 +382,7 @@ func (d *Decimal) RoundDown(precision uint) *Decimal {
 	return d.RoundToZero(precision)
 }
 
-// RoundAwayFromZero rounds (no IEEE 754-2008, round way from zero) to floating-point number d with given precision.
+// RoundAwayFromZero rounds (no IEEE 754-2008, round away from zero) to floating-point number d with given precision.
 func (d *Decimal) RoundAwayFromZero(precision uint) *Decimal {
 	d.ensureInitialized()
 	prec := int(precision)
@@ -381,9 +390,10 @@ func (d *Decimal) RoundAwayFromZero(precision uint) *Decimal {
 		return d
 	}
 
+	sign := d.integer.Sign()
 	diff := new(big.Int).Sub(new(big.Int).Abs(big.NewInt(int64(d.exponent))), big.NewInt(int64(prec)))
 	d.integer.Quo(d.integer, new(big.Int).Exp(big.NewInt(10), diff, nil))
-	d.integer.Add(d.integer, big.NewInt(int64(1*d.integer.Sign()))) // round up
+	d.integer.Add(d.integer, big.NewInt(int64(1*sign))) // round up
 	d.exponent = prec * -1
 	return d
 }
