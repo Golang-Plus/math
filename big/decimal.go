@@ -91,33 +91,37 @@ func (d *Decimal) Int64() (int64, bool) {
 // String converts the floating-point number d to a string.
 func (d *Decimal) String() string {
 	d.ensureInitialized()
-	str := d.integer.String()
-	if d.exponent == 0 {
-		return str
-	}
-	if str == "0" {
+	if d.integer.Cmp(big.NewInt(0)) == 0 { // euqal to zero
 		return "0"
 	}
-	if d.exponent > 0 {
+	str := d.integer.String()
+	if d.exponent == 0 { // value is the integer without exponent
+		return str
+	}
+	if d.exponent > 0 { // value is the integer with exponent
 		return str + strings.Repeat("0", d.exponent)
 	}
 
-	var sign string
+	// has decimal digits
+	var buf bytes.Buffer
 	if strings.HasPrefix(str, "-") {
-		sign = "-"
+		buf.WriteString("-")
 		str = str[1:]
 	}
 	p := len(str) - (d.exponent * -1)
 	if p <= 0 {
-		return sign + "0." + strings.Repeat("0", p*-1) + str
+		buf.WriteString("0.")
+		buf.WriteString(strings.Repeat("0", p*-1))
+		buf.WriteString(strings.TrimRight(str, "0"))
+	} else {
+		buf.WriteString(str[:p]) // integer part
+		decimals := strings.TrimRight(str[p:], "0")
+		if len(decimals) > 0 {
+			buf.WriteString(".")
+			buf.WriteString(decimals)
+		}
 	}
-	integer := str[:p]
-	decimals := strings.TrimRight(str[p:], "0")
-	if len(decimals) == 0 {
-		return sign + integer
-	}
-
-	return sign + integer + "." + decimals
+	return buf.String()
 }
 
 // SetInt64 sets x to y and returns x.
