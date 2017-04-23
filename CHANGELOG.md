@@ -1,4 +1,21 @@
 <a name=""></a>
+# [](https://github.com/Golang-Plus/math/compare/v1.2.0...v) (2017-04-23)
+
+
+### Bug Fixes
+
+* *Decimal.String bug in special case ([91559be](https://github.com/Golang-Plus/math/commit/91559be))
+* bugs in special cases ([3c4ca23](https://github.com/Golang-Plus/math/commit/3c4ca23))
+
+
+### Features
+
+* add more round functions ([907d20a](https://github.com/Golang-Plus/math/commit/907d20a))
+* add MustParseDecimal func ([0dcf854](https://github.com/Golang-Plus/math/commit/0dcf854))
+
+
+
+<a name=""></a>
 # [](https://github.com/Golang-Plus/math/compare/v1.2.0...v) (2017-04-21)
 
 
