@@ -392,7 +392,6 @@ func (d *Decimal) RoundAwayFromZero(precision uint) *Decimal {
 
 	sign := d.integer.Sign()
 	diff := new(big.Int).Sub(new(big.Int).Abs(big.NewInt(int64(d.exponent))), big.NewInt(int64(prec)))
-	d.integer.Quo(d.integer, new(big.Int).Exp(big.NewInt(10), diff, nil))
 	if _, r := d.integer.QuoRem(d.integer, new(big.Int).Exp(big.NewInt(10), diff, nil), new(big.Int)); r.Sign() != 0 {
 		d.integer.Add(d.integer, big.NewInt(int64(1*sign))) // round up
 	}
