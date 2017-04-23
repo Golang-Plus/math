@@ -28,12 +28,6 @@ func (d *Decimal) ensureInitialized() {
 	}
 }
 
-// IsZero reports whether the value of d is equal to zero.
-func (d *Decimal) IsZero() bool {
-	d.ensureInitialized()
-	return d.integer.Cmp(big.NewInt(0)) == 0
-}
-
 // Sign returns:
 // -1: if d <  0
 //  0: if d == 0
@@ -41,6 +35,12 @@ func (d *Decimal) IsZero() bool {
 func (d *Decimal) Sign() int {
 	d.ensureInitialized()
 	return d.integer.Sign()
+}
+
+// IsZero reports whether the value of d is equal to zero.
+func (d *Decimal) IsZero() bool {
+	d.ensureInitialized()
+	return d.integer.Sign() == 0
 }
 
 // Float32 returns the float32 value nearest to d and a boolean indicating whether is exact.
@@ -233,13 +233,11 @@ func (x *Decimal) Sub(y *Decimal) *Decimal {
 func (x *Decimal) Mul(y *Decimal) *Decimal {
 	x.ensureInitialized()
 	y.ensureInitialized()
-
-	if y.integer.Cmp(big.NewInt(0)) == 0 { // *0
+	if y.integer.Sign() == 0 { // *0
 		x.integer.SetInt64(0)
 		x.exponent = 0
 		return x
 	}
-
 	x.integer.Mul(x.integer, y.integer)
 	x.exponent += y.exponent
 	return x
@@ -250,19 +248,17 @@ func (x *Decimal) Mul(y *Decimal) *Decimal {
 func (x *Decimal) Quo(y *Decimal) *Decimal {
 	x.ensureInitialized()
 	y.ensureInitialized()
-
-	if y.integer.Cmp(big.NewInt(0)) == 0 { // /0
+	if y.integer.Sign() == 0 { // /0
 		x.integer.SetInt64(0)
 		x.exponent = 0
 		return x
 	}
-
-	if z, r := new(big.Int).QuoRem(x.integer, y.integer, new(big.Int)); r.Cmp(big.NewInt(0)) == 0 { // modulus x%y == 0
+	// modulus x%y == 0
+	if z, r := new(big.Int).QuoRem(x.integer, y.integer, new(big.Int)); r.Sign() == 0 {
 		x.integer = z
 		x.exponent -= y.exponent
 		return x
 	}
-
 	// modulus x%y > 0
 	var buf bytes.Buffer
 	if x.integer.Sign()*y.integer.Sign() == -1 {
@@ -273,7 +269,7 @@ func (x *Decimal) Quo(y *Decimal) *Decimal {
 	exp := x.exponent - y.exponent
 	z, r := new(big.Int).QuoRem(xi, yi, new(big.Int))
 	buf.WriteString(z.String())
-	for r.Cmp(big.NewInt(0)) != 0 && exp*-1 < int(MaxDecimalDigits) {
+	for r.Sign() != 0 && exp*-1 < int(MaxDecimalDigits) {
 		r.Mul(r, big.NewInt(10))
 		z, r = new(big.Int).QuoRem(r, yi, new(big.Int))
 		buf.WriteString(z.String())
@@ -397,7 +393,9 @@ func (d *Decimal) RoundAwayFromZero(precision uint) *Decimal {
 	sign := d.integer.Sign()
 	diff := new(big.Int).Sub(new(big.Int).Abs(big.NewInt(int64(d.exponent))), big.NewInt(int64(prec)))
 	d.integer.Quo(d.integer, new(big.Int).Exp(big.NewInt(10), diff, nil))
-	d.integer.Add(d.integer, big.NewInt(int64(1*sign))) // round up
+	if _, r := d.integer.QuoRem(d.integer, new(big.Int).Exp(big.NewInt(10), diff, nil), new(big.Int)); r.Sign() != 0 {
+		d.integer.Add(d.integer, big.NewInt(int64(1*sign))) // round up
+	}
 	d.exponent = prec * -1
 	return d
 }
