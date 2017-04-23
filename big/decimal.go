@@ -419,3 +419,12 @@ func ParseDecimal(str string) (*Decimal, error) {
 	}
 	return nil, errors.Newf("decimal string %q is invalid", str)
 }
+
+// MustParseDecimal is similar to ParseDecimal but panics if error occurred.
+func MustParseDecimal(str string) *Decimal {
+	d, err := ParseDecimal(str)
+	if err != nil {
+		panic(err)
+	}
+	return d
+}
